@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>北京地铁 · 候车看板</title>
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161b24; --panel2:#1c2330; --line:#252d3a;
+    --fg:#e6edf3; --dim:#8b98a9; --accent:#4f9cf9; --good:#3fb950;
+    --warn:#d29922; --bad:#f85149; --chip:#22303f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:14px/1.55 -apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:1220px;margin:0 auto;padding:20px}
+
+  /* ---------- 头部 ---------- */
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--good);box-shadow:0 0 10px var(--good)}
+  h1{font-size:18px;margin:0;font-weight:650}
+  .sub{color:var(--dim);font-size:13px}
+  .clock{margin-left:auto;font-variant-numeric:tabular-nums;font-size:22px;font-weight:600}
+
+  /* ---------- 选择栏 ---------- */
+  .bar{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;
+       margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .bar label{font-size:12px;color:var(--dim)}
+  .bar select{background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+       border-radius:7px;padding:5px 8px;font:inherit;max-width:220px}
+  .fav{background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:3px 11px;
+       font-size:12px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+  .fav.on{border-color:var(--accent);color:var(--accent)}
+  .fav .x{color:var(--dim);margin-left:2px} .fav .x:hover{color:var(--bad)}
+
+  /* ---------- 页签 ---------- */
+  nav{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px}
+  nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);
+       font:inherit;font-weight:600;padding:9px 16px;cursor:pointer;border-radius:8px 8px 0 0}
+  nav button:hover{color:var(--fg);background:var(--panel)}
+  nav button.on{color:var(--accent);border-bottom-color:var(--accent)}
+  .page{display:none} .page.on{display:block}
+
+  /* ---------- 通用卡片 ---------- */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:16px}
+  .card h2{font-size:13px;color:var(--dim);font-weight:600;margin:0 0 12px;letter-spacing:.4px}
+  .grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:16px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .hero{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .big{font-size:44px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+  .big.warn{color:var(--warn)} .big.bad{color:var(--bad)} .big.good{color:var(--good)}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px}
+  .kv dt{color:var(--dim)} .kv dd{margin:0;font-variant-numeric:tabular-nums}
+  .rail{height:5px;background:var(--panel2);border-radius:3px;overflow:hidden;margin:14px 0 6px}
+  .rail>i{display:block;height:100%;background:var(--accent);border-radius:3px}
+  .rail>i.hot{background:var(--good)} .rail>i.mid{background:var(--warn)} .rail>i.low{background:var(--bad)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .chip{background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:12px;
+        font-variant-numeric:tabular-nums}
+  .chip.on{border-color:var(--accent);color:var(--accent)}
+  .note{color:var(--dim);font-size:12px;margin-top:10px;line-height:1.5}
+  .verdict{border-left:3px solid var(--accent);padding:10px 12px;background:var(--panel2);border-radius:0 8px 8px 0;margin-top:12px}
+  .verdict.good{border-color:#7fcba6} .verdict.warn{border-color:#f0c070} .verdict.bad{border-color:#ee9a9a}
+  .verdict b{font-size:15px}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+  th{color:var(--dim);font-weight:500;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);font-size:12px}
+  td{padding:6px 8px;border-bottom:1px solid #1b222d}
+  tr.now td{background:rgba(79,156,249,.12);font-weight:600}
+  tr.past td{color:#5b6676}
+  tr.sel td{background:rgba(63,185,80,.14)}
+  #tbody tr{cursor:pointer} #tbody tr:hover td{background:#1d2532}
+  .scroll{max-height:420px;overflow:auto}
+  .scroll::-webkit-scrollbar{width:8px}.scroll::-webkit-scrollbar-thumb{background:#2a3341;border-radius:4px}
+
+  button.act{background:var(--accent);color:#06101d;border:0;border-radius:8px;padding:7px 14px;font:inherit;
+         font-weight:600;cursor:pointer}
+  button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);border-radius:8px;
+         padding:7px 14px;font:inherit;font-weight:500;cursor:pointer}
+  button:hover{filter:brightness(1.08)}
+  .ok{color:var(--good)} .warn{color:var(--warn)} .bad{color:var(--bad)} .dim{color:var(--dim)}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:5px;background:var(--chip);color:var(--dim);margin-left:6px}
+  .err{color:var(--bad);font-size:13px}
+  .foot{margin-top:18px;color:#5b6676;font-size:12px;line-height:1.6}
+
+  /* ---------- 模拟时钟（马卡龙配色） ---------- */
+  .clockface .hand{stroke:#f2f6fb;stroke-linecap:round}
+  .clockface .ringbg{fill:#11161f}
+  .clockface .disc{fill:rgba(17,22,31,.86);stroke:rgba(242,246,251,.14);stroke-width:1}
+  .clockface .hh{stroke-width:5}
+  .clockface .mh{stroke-width:3.4}
+  .clockface .pin{fill:#f2f6fb;stroke:#11161f;stroke-width:1}
+  .clockface .num{font-size:9.5px;font-weight:700;text-anchor:middle;dominant-baseline:middle;
+                  fill:#f2f6fb;paint-order:stroke;stroke:rgba(17,22,31,.55);stroke-width:1.6}
+  .clockface .num.on{fill:#ffffff;stroke:#11161f;stroke-width:2.2}
+  .clockface .nowdot{fill:#ffffff;stroke:#11161f;stroke-width:1.2}
+  .clocklabel{font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;
+      background:rgba(127,203,166,.18);color:#8fd8b4;white-space:nowrap;transition:all .6s}
+  .clocklabel.warn{background:rgba(240,192,112,.18);color:#f3cb85}
+  .clocklabel.bad{background:rgba(238,154,154,.18);color:#f0a8a8}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--dim);margin-top:6px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+  .lg-good{background:#7fcba6} .lg-warn{background:#f0c070}
+  .lg-bad{background:#ee9a9a} .lg-none{background:#39424f}
+
+  /* ---------- 24 小时色带 ---------- */
+  .strip{position:relative;height:34px;border-radius:8px;overflow:hidden;background:#11161f;
+         border:1px solid var(--line);margin-top:12px}
+  .strip .sg{position:absolute;top:0;bottom:0}
+  .strip .sg.good{background:#7fcba6}
+  .strip .sg.warn{background:#f0c070}
+  .strip .sg.bad{background:#ee9a9a}
+  .strip .sg.none{background:#2f3844}
+  .strip .mk{position:absolute;bottom:0;height:5px;width:1px;background:rgba(255,255,255,.5)}
+  .strip .now{position:absolute;top:-2px;bottom:-2px;width:2px;background:#4f9cf9;
+              box-shadow:0 0 6px #4f9cf9}
+  .striplab{display:flex;justify-content:space-between;color:var(--dim);font-size:11px;margin-top:3px}
+
+  /* ---------- 事件列表 ---------- */
+  .evlist{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+  .ev{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:baseline;
+      background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:13px}
+  .ev .st{font-weight:600}
+  .ev .ln{color:var(--dim);font-size:12px}
+  .ev .tm{font-variant-numeric:tabular-nums;color:var(--warn)}
+  .ev.mine{border-color:var(--warn)}
+  .pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;background:var(--chip);color:var(--dim)}
+  .pill.warn{background:rgba(210,153,34,.15);color:var(--warn)}
+
+  /* ---------- 设置 ---------- */
+  .fset{display:flex;flex-direction:column;gap:12px;max-width:520px}
+  .fld{display:grid;grid-template-columns:130px 110px 1fr;gap:10px;align-items:baseline}
+  .fld label{font-size:13px}
+  .fld input{background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+       border-radius:7px;padding:6px 9px;font:inherit;font-variant-numeric:tabular-nums;width:100px}
+  .fld .hint{color:var(--dim);font-size:12px}
+  .favrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="dot"></span>
+    <h1 id="title">地铁候车看板</h1>
+    <span class="sub" id="subtitle">加载中…</span>
+    <span class="clock" id="clock">--:--:--</span>
+  </header>
+
+  <div class="bar">
+    <label>线路 <select id="lineSel"><option>加载中…</option></select></label>
+    <label>站点 <select id="stationSel"><option>加载中…</option></select></label>
+    <label>方向 <select id="dirSel"><option>加载中…</option></select></label>
+    <button class="ghost" id="addFav">☆ 收藏当前</button>
+    <span id="favs" class="favrow"></span>
+  </div>
+
+  <nav id="tabs">
+    <button data-p="p1" class="on">🚇 候车</button>
+    <button data-p="p2">📊 卡点分析</button>
+    <button data-p="p3">⚠️ 运行信息</button>
+    <button data-p="p4">⚙️ 设置</button>
+  </nav>
+
+  <!-- ================= 页 1：候车 ================= -->
+  <section class="page on" id="p1">
+    <div class="grid">
+      <div>
+        <div class="card">
+          <h2 id="nextH">下一班</h2>
+          <div id="nextBox"><div class="dim">加载中…</div></div>
+        </div>
+        <div class="card">
+          <h2>现在就走的判定</h2>
+          <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
+            <div id="leaveNow" style="flex:1 1 260px;min-width:0"><div class="dim">加载中…</div></div>
+            <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:8px">
+              <svg id="lclock" width="190" height="190" viewBox="0 0 100 100" class="clockface">
+                <circle cx="50" cy="50" r="48" class="ringbg"/>
+                <g id="ringSegs"></g>
+                <circle cx="50" cy="50" r="18" class="disc"/>
+                <g id="ringNums"></g>
+                <circle id="nowDot" r="2.6" class="nowdot"/>
+                <line x1="50" y1="50" x2="50" y2="37" class="hand hh" data-len="13"/>
+                <line x1="50" y1="50" x2="50" y2="30" class="hand mh" data-len="20"/>
+                <circle cx="50" cy="50" r="2.8" class="pin"/>
+              </svg>
+              <div id="lclockLabel" class="clocklabel good">加载中…</div>
+              <div class="legend">
+                <span><i class="lg-good"></i>最佳出发</span>
+                <span><i class="lg-warn"></i>可等</span>
+                <span><i class="lg-bad"></i>太早</span>
+                <span><i class="lg-none"></i>无车</span>
+              </div>
+            </div>
+          </div>
+          <div class="strip" id="dayStrip"></div>
+          <div class="striplab" id="stripLab"></div>
+          <div class="note">外圈每一格 = 1 分钟（数字 8~10 的位置对应 40~50 分），颜色表示该分钟出发的好坏，白点是当前时刻；下方色带为当日营运时段，白竖线=最佳出发时刻，蓝线=现在。</div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>建议离开工位的时刻 <span class="tag">点击选中并复制</span></h2>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>车次到站</th><th>最晚离开工位</th><th>备注</th></tr></thead>
+            <tbody id="tbody"><tr><td colspan="3" class="dim">加载中…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="note">规则：离开工位时刻 = 车次到站时刻 − (步行 + 缓冲)。当前参数可在「设置」页调整。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 页 2：卡点分析 ================= -->
+  <section class="page" id="p2">
+    <div class="grid">
+      <div class="card">
+        <h2>卡点 vs 随缘走</h2>
+        <div id="optBox"><div class="dim">加载中…</div></div>
+      </div>
+      <div class="card">
+        <h2>缓冲 b 逐档对比 <span class="tag">当前参数见设置页</span></h2>
+        <div class="scroll"><table id="sweepT">
+          <thead><tr><th>b（分）</th><th>期望候车</th><th>错车率</th><th>期望总损失</th></tr></thead>
+          <tbody id="sweep"><tr><td colspan="4" class="dim">加载中…</td></tr></tbody>
+        </table></div>
+        <div class="note">总损失 = 期望候车 + 错车率 × 发车间隔；绿色为最优档。σ 取设置页的「步行波动」。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 页 3：运行信息 ================= -->
+  <section class="page" id="p3">
+    <div class="grid">
+      <div class="card">
+        <h2>限流与客流管控</h2>
+        <div id="crowd"><div class="dim">加载中…</div></div>
+      </div>
+      <div class="card">
+        <h2 id="flH">首末班车</h2>
+        <div id="fl"><div class="dim">加载中…</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 页 4：设置 ================= -->
+  <section class="page" id="p4">
+    <div class="grid">
+      <div class="card">
+        <h2>出发模型参数</h2>
+        <div class="fset">
+          <div class="fld">
+            <label for="walk">步行时间（分）</label>
+            <input id="walk" type="number" min="5" max="60" step="1" value="20">
+            <span class="hint">工位到站台的平均步行时长</span>
+          </div>
+          <div class="fld">
+            <label for="buffer">缓冲 b（分）</label>
+            <input id="buffer" type="number" min="0" max="15" step="0.5" value="1">
+            <span class="hint">故意提前到站的分钟数，0~3 常用</span>
+          </div>
+          <div class="fld">
+            <label for="sigma">步行波动 σ（分）</label>
+            <input id="sigma" type="number" min="0" max="15" step="0.5" value="3">
+            <span class="hint">步行时长的标准差；走得稳填 1，波动大填 3+</span>
+          </div>
+          <div class="fld">
+            <label for="gThresh">绿色阈值（分）</label>
+            <input id="gThresh" type="number" min="1" max="30" step="1" value="2">
+            <span class="hint">到站候车 ≤ 此值算「最佳出发窗口」</span>
+          </div>
+          <div class="fld">
+            <label for="yThresh">黄色阈值（分）</label>
+            <input id="yThresh" type="number" min="2" max="60" step="1" value="5">
+            <span class="hint">候车在此值内算「可等」，超过算「太早」</span>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:4px">
+            <button class="act" id="refresh">立即刷新</button>
+            <button class="ghost" id="auto" data-on="1">自动刷新：开</button>
+          </div>
+          <div class="note">参数修改立即生效，并自动记住（下次打开无需重填）。最优缓冲建议见「卡点分析」页。</div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>常用收藏管理</h2>
+        <div id="favMgmt" class="favrow"><span class="dim">暂无收藏，用顶部「☆ 收藏当前」添加。</span></div>
+        <div class="note">收藏即「站点 + 方向」组合，存在本浏览器里；点名称切换，点 ✕ 删除。</div>
+        <h2 style="margin-top:20px">数据与刷新</h2>
+        <dl class="kv">
+          <dt>数据源</dt><dd>RuubyPay PIS（实时到站 / 时刻表 / 首末班 / 限流事件）</dd>
+          <dt>自动刷新间隔</dt><dd>20 秒（倒计时每秒本地刷新）</dd>
+          <dt>满载率说明</dt><dd>fullLoadRate 全网恒为 50（占位值），不可用</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">
+    数据源：RuubyPay PIS（getRealtimeStationInfo / getStationTimetable / getStationFirstLastTrain / normalEvent）。
+    实时 ETA 与今日计划时刻偏差为 0 秒。
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let timer=null, autoOn=true, lastState=null, lastFit=null;
+let META=null;
+const LS_SEL="bjsub.sel", LS_FAV="bjsub.favs", LS_TAB="bjsub.tab";
+const DEF={loc:"150999351", dir:"未来科学城", line:null};
+
+function loadSel(){ try{return JSON.parse(localStorage.getItem(LS_SEL))||{}}catch(e){return {}} }
+function saveSel(o){ localStorage.setItem(LS_SEL, JSON.stringify(o)); }
+function loadFavs(){ try{return JSON.parse(localStorage.getItem(LS_FAV))||[]}catch(e){return []} }
+function saveFavs(a){ localStorage.setItem(LS_FAV, JSON.stringify(a)); }
+
+function fmtCount(sec){
+  if(sec<0) return "已过";
+  const m=Math.floor(sec/60), s=sec%60;
+  return m>0 ? `${m}分${String(s).padStart(2,'0')}秒` : `${s}秒`;
+}
+function railClass(sec){ return sec<=120?'hot':sec<=300?'mid':'low'; }
+
+/* ---------- 页签 ---------- */
+$$('#tabs button').forEach(b=>b.onclick=()=>{
+  $$('#tabs button').forEach(x=>x.classList.remove('on'));
+  $$('.page').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); $('#'+b.dataset.p).classList.add('on');
+  localStorage.setItem(LS_TAB,b.dataset.p);
+});
+(function restoreTab(){
+  const t=localStorage.getItem(LS_TAB);
+  if(t && $('#'+t)){ $$('#tabs button').forEach(x=>x.classList.toggle('on',x.dataset.p===t));
+    $$('.page').forEach(x=>x.classList.toggle('on',x.id===t)); }
+})();
+
+/* ---------- 数据加载 ---------- */
+async function load(){
+  const walk=$('#walk').value, buffer=$('#buffer').value, sigma=$('#sigma').value;
+  const loc=currentLoc(), dir=currentDir();
+  try{
+    const r=await fetch(`/api/state?walk=${walk}&buffer=${buffer}&sigma=${sigma}&loc=${encodeURIComponent(loc)}&dir=${encodeURIComponent(dir)}`);
+    const j=await r.json();
+    if(j.error){ $('#nextBox').innerHTML=`<div class="err">${j.error}</div>`; return; }
+    lastState=j; lastState._skew=Date.now()/1000-j.now; render(j); updateFit();
+    loadFit(loc,dir,walk,buffer);
+  }catch(e){ $('#nextBox').innerHTML=`<div class="err">请求失败：${e}</div>`; }
+}
+
+async function loadFit(loc,dir,walk,buffer){
+  try{
+    const g=$('#gThresh')?$('#gThresh').value:2;
+    const y=$('#yThresh')?$('#yThresh').value:5;
+    const r=await fetch(`/api/dayfit?loc=${encodeURIComponent(loc)}&dir=${encodeURIComponent(dir)}&walk=${walk}&buffer=${buffer}&g=${g}&y=${y}`);
+    const f=await r.json();
+    lastFit=f; renderDial(f); renderStrip(f);
+  }catch(e){ /* 适宜度计算失败不影响主流程 */ }
+}
+
+function currentLoc(){ return $('#stationSel').value || DEF.loc; }
+function currentDir(){ return $('#dirSel').value || DEF.dir; }
+function dirLabel(j){
+  const g=(j.groups||[])[0];
+  if(g) return `开往 ${g.dest}`;
+  return j.dirFilter? `开往 ${j.dirFilter}` : '全部方向';
+}
+
+/* ---------- 渲染 ---------- */
+function render(j){
+  $('#title').textContent=`${j.station.name} · ${j.station.line}`;
+  $('#subtitle').textContent=`${dirLabel(j)} ｜ device_location=${j.station.id}`;
+  $('#nextH').textContent=`下一班（${dirLabel(j)}）`;
+  $('#flH').textContent=`首末班车（${dirLabel(j)}）`;
+
+  // ---- 页1：下一班（只推荐"现在出发还来得及"的班次）----
+  const g=(j.groups||[])[0];
+  const act=(g?.trains||[]).find(t=>!t.missed);
+  const missedN=(g?.trains||[]).filter(t=>t.missed).length;
+  if(!act){
+    $('#nextBox').innerHTML=
+      (missedN?`<div class="note" style="margin:0 0 8px">最近 ${missedN} 班按当前参数（步行 ${j.walk} 分 + 缓冲 ${j.buffer} 分）已来不及，已略过。</div>`:'')+
+      '<div class="dim">'+((j.upcoming||[]).length?'今日实时车次均来不及，看下方「建议离开工位的时刻」':'暂无实时车次')+'</div>';
+  } else{
+    const t=act;
+    const pct=Math.max(4,Math.min(100,100-(t.countdown/600)*100));
+    const cls=t.countdown<=120?'good':t.countdown<=300?'warn':'bad';
+    $('#nextBox').innerHTML=`
+      ${missedN?`<div class="note" style="margin:0 0 8px">已略过 ${missedN} 班来不及的车（离开时刻已过）。</div>`:''}
+      <div class="hero">
+        <span class="big ${cls}" data-cd="${t.countdown}">${fmtCount(t.countdown)}</span>
+        <span class="dim">后到站</span>
+        <span class="chip on">到站 ${t.arriveText}</span>
+        <span class="chip ${t.leaveBy<=j.now+300?'on':''}">最晚 ${t.leaveText} 离开工位</span>
+      </div>
+      <div class="rail"><i class="${railClass(t.countdown)}" style="width:${pct}%"></i></div>
+      <div class="chips">
+        ${(j.upcoming||[]).slice(1,5).map(x=>`<span class="chip">再下一班 ${x.arriveText}</span>`).join('')}
+        <span class="chip">方向标识站 ${g.dirMark}</span>
+      </div>`;
+  }
+
+  // ---- 页1：现在就走 ----
+  const L=j.leaveNow;
+  if(L.catchArrive){
+    const wait=L.catchWait, late=wait<0;
+    const cls=wait<=60?'good':wait<=180?'warn':'bad';
+    const up=(j.upcoming||[])[0];
+    $('#leaveNow').innerHTML=`
+      <dl class="kv">
+        <dt>现在离开工位</dt><dd>${j.nowText}</dd>
+        <dt>预计到站</dt><dd>${L.arriveText}（步行 ${j.walk} 分）</dd>
+        <dt>能赶上的车</dt><dd class="${cls}">${L.catchArrive}${late?'（这班已开走）':`（再等 ${fmtCount(wait)}）`}</dd>
+      </dl>
+      <div class="verdict ${late?'bad':wait<=180?'good':'warn'}">
+        <b>${late?'这班车已开走，等下一班。':wait<=120?'现在走就行，踩点能上。':wait<=300?'可以现在走，最多等 '+fmtCount(wait)+'。':'现在走要等 '+fmtCount(wait)+'，不划算。'}</b>
+        <div class="note">下一班：到站 ${up?up.arriveText:'-'} → 最晚 ${up?up.leaveText:'-'} 离开工位</div>
+      </div>`;
+  } else {
+    $('#leaveNow').innerHTML='<div class="dim">今日该方向已无后续车次</div>';
+  }
+
+  // ---- 页1：时刻表 ----
+  const tb=$('#tbody');
+  if(j.table&&j.table.length){
+    const rows=j.table.filter(r=>r.state!=='past');
+    tb.innerHTML=(rows.length?rows:j.table).map(r=>{
+      const cls=r.state==='next'?'now':'';
+      const note=r.state==='next'?'← 最近可赶':'';
+      return `<tr class="${cls}" data-ts="${r.leaveTs}"><td>${r.arrive}</td><td>${r.leave}</td><td class="dim">${note}</td></tr>`;
+    }).join('');
+    $$('#tbody tr').forEach(tr=>tr.onclick=()=>{
+      $$('#tbody tr').forEach(x=>x.classList.remove('sel'));
+      tr.classList.add('sel');
+      const txt=tr.children[1].textContent;
+      navigator.clipboard?.writeText(txt);
+      tr.children[2].textContent='已复制 '+txt;
+    });
+  } else tb.innerHTML='<tr><td colspan="3" class="dim">无数据</td></tr>';
+
+  // ---- 页2：卡点分析 ----
+  const o=j.opt;
+  if(o&&o.sweep){
+    const cur=o.sweep.find(x=>Math.abs(x.b-j.buffer)<1e-6)||o.sweep[0];
+    const stable=o.stable.find(x=>x.b===1);
+    const better=cur.wait<o.baseline;
+    $('#optBox').innerHTML=`
+      <dl class="kv">
+        <dt>当前时段车次间隔</dt><dd>${o.headwayMin}–${o.headwayMax} 分（均值 ${o.headway}）</dd>
+        <dt>随便走（随机出发）</dt><dd>期望候车 <b>${o.baseline}</b> 分</dd>
+        <dt>卡点（σ=${j.sigma} 分）</dt><dd>期望候车 <b class="${better?'ok':'bad'}">${cur.wait}</b> 分，错车率 ${cur.miss}%</dd>
+        <dt>卡点（σ=1 分，稳定）</dt><dd>期望候车 <b class="ok">${stable.wait}</b> 分，错车率 ${stable.miss}%</dd>
+        <dt>按损失最优缓冲</dt><dd>b = ${o.best.b} 分</dd>
+      </dl>
+      <div class="verdict ${j.sigma>2?'warn':'good'}">
+        <b>${j.sigma<=1.5?'你的步行很稳 → 值得卡点':j.sigma<=2.5?'卡点与随机基本持平 → 随缘走即可':'步行波动大 → 卡点不划算，随机走反而更优'}</b>
+        <div class="note">错一班的代价 = 整整一个发车间隔（${o.headway} 分）。步行波动越大，卡点越容易被反噬。</div>
+      </div>`;
+    $('#sweep').innerHTML=o.sweep.map(x=>{
+      const best=x.b===o.best.b;
+      const curMark=Math.abs(x.b-j.buffer)<1e-6;
+      return `<tr class="${best?'now':''}" style="${curMark?'outline:1px dashed var(--accent)':''}">
+        <td>${x.b}${curMark?' ◀ 当前':''}</td>
+        <td class="${best?'ok':''}">${x.wait}</td>
+        <td>${x.miss}%</td>
+        <td class="${best?'ok':''}">${x.loss}</td></tr>`;
+    }).join('');
+  } else { $('#optBox').innerHTML='<div class="dim">今日车次不足，无法仿真</div>';
+           $('#sweep').innerHTML='<tr><td colspan="4" class="dim">无数据</td></tr>'; }
+
+  // ---- 页3：限流事件（结构化列表）----
+  const ev=j.events||{};
+  const mine=ev.line||[];
+  $('#crowd').innerHTML=`
+    <dl class="kv" style="margin-bottom:4px">
+      <dt>当前全网生效</dt><dd><b>${ev.active.length}</b> 条 / 共收录 ${ev.total} 条</dd>
+      <dt>本站·本线</dt><dd>${mine.length?`<span class="warn">⚠ ${mine.length} 条相关</span>`:'<span class="ok">无相关限流</span>'}</dd>
+    </dl>
+    ${(ev.active||[]).length?`<div class="evlist">${ev.active.map(e=>{
+        const isMine=mine.some(m=>m.desc===e.desc);
+        return `<div class="ev ${isMine?'mine':''}">
+          <span class="st">${e.station}</span>
+          <span class="ln">${e.lineName}${isMine?' <span class="pill warn">本线路</span>':''}<br>${e.desc}</span>
+          <span class="tm">${e.btime}–${e.etime}</span>
+        </div>`;}).join('')}</div>`
+      :'<div class="verdict good" style="margin-top:10px"><b>当前全网无限流事件生效</b></div>'}`;
+
+  // ---- 页3：首末班 ----
+  const fl=j.firstLast||[];
+  $('#fl').innerHTML= fl.length? `<table><thead><tr><th>类型</th><th>发车</th><th>终点</th><th>到达</th></tr></thead><tbody>${
+      fl.map(x=>`<tr><td>${x.isLast?'末班车':'首班车'}</td><td>${x.drive}</td><td>${x.dest}</td><td>${x.destTime}</td></tr>`).join('')
+    }</tbody></table>` : '<div class="dim">无数据</div>';
+}
+
+/* ---------- 模拟时钟：60 个扇形（从圆心辐射）按分钟着色 ---------- */
+const R=48;                 // 外半径
+const RIN=18;               // 内盘半径（数字与指针所在）
+const RHOLE=29;             // 扇形内孔半径（数字环外沿）
+
+function angOf(min){ return (min/60)*360-90; }
+function polar(min,r){
+  const a=angOf(min)*Math.PI/180;
+  return [50+r*Math.cos(a), 50+r*Math.sin(a)];
+}
+/* 画一个从内孔到外沿的环形扇形（每分钟一格） */
+function arcSeg(m0,m1,color){
+  const a0=angOf(m0)*Math.PI/180, a1=angOf(m1)*Math.PI/180;
+  const [x0,y0]=polar(m0,R), [x1,y1]=polar(m1,R);
+  const [x2,y2]=polar(m1,RHOLE), [x3,y3]=polar(m0,RHOLE);
+  const large=(m1-m0)>30?1:0;
+  return `<path d="M${x0.toFixed(2)},${y0.toFixed(2)} A${R},${R} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)}
+           L${x2.toFixed(2)},${y2.toFixed(2)} A${RHOLE},${RHOLE} 0 ${large} 0 ${x3.toFixed(2)},${y3.toFixed(2)} Z"
+           fill="${color}" stroke="#11161f" stroke-width="0.35"/>`;
+}
+const SEGCOL={good:'#7fcba6',warn:'#f0c070',bad:'#ee9a9a',none:'#333c48'};
+
+function renderDial(fit){
+  const g=$('#ringSegs'), n=$('#ringNums');
+  if(!fit||!fit.pattern){ g.innerHTML=''; n.innerHTML=''; return; }
+  // 相邻同色合并，减少路径数
+  let s='';
+  const p=fit.pattern;
+  let i=0;
+  while(i<60){
+    let j=i+1;
+    while(j<60 && p[j]===p[i]) j++;
+    s+=arcSeg(i,j,SEGCOL[p[i]]||SEGCOL.none);
+    i=j;
+  }
+  g.innerHTML=s;
+  // 数字 1..12 放在内盘外沿（数字环），当前所在分钟的数字高亮
+  let ns='';
+  const curM=new Date().getMinutes();
+  for(let n2=1;n2<=12;n2++){
+    const m=n2*5;
+    const [x,y]=polar(m,RIN+6.5);
+    const on=(m%60===curM);
+    ns+=`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" class="num ${on?'on':''}">${n2}</text>`;
+  }
+  n.innerHTML=ns;
+}
+
+function renderStrip(fit){
+  const el=$('#dayStrip'), lab=$('#stripLab');
+  if(!fit||!fit.day){ el.innerHTML=''; lab.innerHTML=''; return; }
+  // 只保留有车的营运时段（去掉首尾的无车段）
+  const segs=fit.day.filter(s=>s.level!=='none');
+  if(!segs.length){ el.innerHTML=''; lab.innerHTML='<span>当日无车次</span>'; return; }
+  const t0=segs[0].start, t1=segs[segs.length-1].end;
+  const span=Math.max(1,t1-t0);
+  let s='';
+  for(const seg of segs){
+    const l=(seg.start-t0)/span*100, w=(seg.end-seg.start)/span*100;
+    s+=`<div class="sg ${seg.level}" style="left:${l.toFixed(3)}%;width:${Math.max(w,0.06).toFixed(3)}%"></div>`;
+  }
+  for(const m of (fit.markers||[])){
+    if(m<t0||m>t1) continue;
+    s+=`<div class="mk" style="left:${((m-t0)/span*100).toFixed(3)}%" title="最佳出发 ${fmtHM(m)}"></div>`;
+  }
+  if(fit.nowMin!=null && fit.nowMin>=t0 && fit.nowMin<=t1){
+    s+=`<div class="now" style="left:${((fit.nowMin-t0)/span*100).toFixed(3)}%"></div>`;
+  }
+  el.innerHTML=s;
+  // 时间刻度：按营运区间等分
+  const ticks=[];
+  for(let i=0;i<=4;i++){
+    const m=Math.round(t0+span*i/4);
+    ticks.push(`<span>${fmtHM(m)}</span>`);
+  }
+  lab.innerHTML=ticks.join('');
+}
+
+function fmtHM(m){
+  const h=Math.floor(m/60)%24, mi=m%60;
+  return `${String(h).padStart(2,'0')}:${String(mi).padStart(2,'0')}`;
+}
+
+/* 指针：时针/分针（无秒针）+ 当前分钟格高亮 */
+function tickClock(){
+  const d=new Date();
+  const s=d.getSeconds()+d.getMilliseconds()/1000;
+  const mi=d.getMinutes()+s/60;
+  const h=(d.getHours()%12)+mi/60;
+  const set=(sel,ang)=>{
+    const a=ang*Math.PI/180-Math.PI/2;
+    const el=document.querySelector(sel);
+    const len=+el.getAttribute('data-len')||1;
+    el.setAttribute('x2',(50+len*Math.cos(a)).toFixed(2));
+    el.setAttribute('y2',(50+len*Math.sin(a)).toFixed(2));
+  };
+  set('.hh',h*30); set('.mh',mi*6);
+  // 当前分钟在色环上的游标点
+  const dot=document.querySelector('#nowDot');
+  if(dot){
+    const a=((mi%60)/60)*360*Math.PI/180-Math.PI/2;
+    dot.setAttribute('cx',(50+R*Math.cos(a)).toFixed(2));
+    dot.setAttribute('cy',(50+R*Math.sin(a)).toFixed(2));
+  }
+  // 当前所在分钟的表盘数字高亮
+  const curM=d.getMinutes();
+  $$('#ringNums text').forEach(t=>{
+    const v=+t.textContent;
+    t.classList.toggle('on',(v*5)%60===curM);
+  });
+}
+
+/* 适合度标签：由当前判定实时推算
+   green=现在走最好（≤3分候车）；yellow=等 3~8 分，先别急；
+   red=刚错过 / 候车 8 分以上 / 收车。 */
+let fitLevel='good';
+function setFit(level, label){
+  fitLevel=level;
+  const el=$('#lclockLabel');
+  el.className='clocklabel '+level;
+  el.textContent=label;
+}
+
+function updateFit(){
+  const L=lastState?.leaveNow;
+  if(!L||!L.catchArrive){ setFit('bad','今日收车'); return; }
+  const nowS=Date.now()/1000 - (lastState._skew||0);
+  const walk=jWalk(), buf=jBuf();
+  const wait=L.catchTime - (nowS + walk*60);    // 实时重算候车秒数
+  if(wait<0) setFit('bad','刚刚错过，快走！');
+  else if(wait<=180) setFit('good','现在走正合适');
+  else if(wait<=480) setFit('warn','等一会儿再走');
+  else setFit('bad','现在走太早，别急');
+}
+function jWalk(){ return parseFloat($('#walk').value)||20; }
+function jBuf(){ return parseFloat($('#buffer').value)||1; }
+
+setFit('good','加载中…');
+setInterval(tickClock,50); tickClock();
+setInterval(updateFit,1000); updateFit();
+
+/* ---------- 参数 ---------- */
+['walk','buffer','sigma','gThresh','yThresh'].forEach(id=>$('#'+id).addEventListener('change',()=>{
+  saveSel({...loadSel(), walk:$('#walk').value, buffer:$('#buffer').value, sigma:$('#sigma').value,
+            g:$('#gThresh').value, y:$('#yThresh').value});
+  load();
+}));
+$('#refresh').onclick=load;
+$('#auto').onclick=()=>{ autoOn=!autoOn; $('#auto').textContent='自动刷新：'+(autoOn?'开':'关');
+  $('#auto').dataset.on=autoOn?1:0; clearInterval(timer); if(autoOn) timer=setInterval(load,20000); };
+timer=setInterval(load,20000);
+
+/* ---------- 站点/方向选择 + 常用收藏 ---------- */
+async function initMeta(){
+  try{
+    const r=await fetch('/api/meta'); META=await r.json();
+  }catch(e){ $('#lineSel').innerHTML='<option>加载失败</option>'; return; }
+  const sel=loadSel();
+  if(sel.walk){ $('#walk').value=sel.walk; }
+  if(sel.buffer){ $('#buffer').value=sel.buffer; }
+  if(sel.sigma){ $('#sigma').value=sel.sigma; }
+  if(sel.g){ $('#gThresh').value=sel.g; }
+  if(sel.y){ $('#yThresh').value=sel.y; }
+  $('#lineSel').innerHTML=META.lines.map(l=>`<option value="${l.id}">${l.name}</option>`).join('');
+  let lineId=sel.line;
+  if(!lineId){
+    const found=META.lines.find(l=>l.stations.some(s=>s.loc===String(sel.loc||DEF.loc)));
+    lineId=found?found.id:META.lines[0].id;
+  }
+  $('#lineSel').value=lineId;
+  fillStations(lineId, sel.loc||DEF.loc);
+  $('#lineSel').onchange=()=>{ fillStations($('#lineSel').value); onStationPicked(); };
+  $('#stationSel').onchange=onStationPicked;
+  $('#dirSel').onchange=()=>{ persist(); renderFavs(); load(); };
+  await fillDirs($('#stationSel').value, sel.dir||DEF.dir);
+  renderFavs();
+  load();
+}
+
+function fillStations(lineId, preferLoc){
+  const l=META.lines.find(x=>x.id===lineId)||META.lines[0];
+  $('#stationSel').innerHTML=l.stations.map(s=>`<option value="${s.loc}">${s.name}</option>`).join('');
+  if(preferLoc && l.stations.some(s=>s.loc===String(preferLoc))) $('#stationSel').value=preferLoc;
+}
+
+async function fillDirs(loc, preferDir){
+  $('#dirSel').innerHTML='<option>加载中…</option>';
+  try{
+    const r=await fetch(`/api/dirs?loc=${encodeURIComponent(loc)}`);
+    const j=await r.json();
+    $('#dirSel').innerHTML=(j.dirs||[]).map(d=>
+      `<option value="${d.dirMark}">往 ${d.dest}（${d.dirMark}）</option>`).join('') ||
+      '<option value="">全部方向</option>';
+    const vals=$$('#dirSel option').map(o=>o.value);
+    if(preferDir && vals.includes(preferDir)) $('#dirSel').value=preferDir;
+  }catch(e){ $('#dirSel').innerHTML='<option value="">全部方向</option>'; }
+}
+
+function persist(){
+  const l=META.lines.find(x=>x.id===$('#lineSel').value);
+  saveSel({line:$('#lineSel').value, loc:currentLoc(), dir:currentDir(),
+           walk:$('#walk').value, buffer:$('#buffer').value, sigma:$('#sigma').value,
+           g:$('#gThresh').value, y:$('#yThresh').value,
+           lineName:l?l.name:''});
+}
+
+async function onStationPicked(){
+  persist();
+  await fillDirs(currentLoc());
+  load();
+}
+
+function renderFavs(){
+  const favs=loadFavs();
+  const cur={loc:currentLoc(), dir:currentDir()};
+  const isCur=f=>f.loc===cur.loc&&f.dir===cur.dir;
+  $('#addFav').textContent = favs.some(isCur)?'★ 已收藏':'☆ 收藏当前';
+  $('#favs').innerHTML=favs.map((f,i)=>
+    `<span class="fav ${isCur(f)?'on':''}" data-i="${i}">${f.label}<span class="x" data-del="${i}">✕</span></span>`).join('');
+  $('#favMgmt').innerHTML=favs.length?favs.map((f,i)=>
+    `<span class="fav ${isCur(f)?'on':''}" data-i="${i}">${f.label}<span class="x" data-del="${i}">✕ 删除</span></span>`).join('')
+    :'<span class="dim">暂无收藏，用顶部「☆ 收藏当前」添加。</span>';
+  const click=el=>el.onclick=e=>{
+    if(e.target.dataset.del!==undefined) return;
+    applyFav(loadFavs()[el.dataset.i]);
+  };
+  $$('#favs .fav').forEach(click); $$('#favMgmt .fav').forEach(click);
+  $$('[data-del]').forEach(el=>el.onclick=e=>{
+    e.stopPropagation();
+    const a=loadFavs(); a.splice(el.dataset.del,1); saveFavs(a); renderFavs();
+  });
+}
+
+async function applyFav(f){
+  const found=META.lines.find(l=>l.stations.some(s=>s.loc===f.loc));
+  if(found){ $('#lineSel').value=found.id; fillStations(found.id, f.loc); }
+  else $('#stationSel').value=f.loc;
+  await fillDirs(f.loc, f.dir);
+  persist(); renderFavs(); load();
+}
+
+$('#addFav').onclick=()=>{
+  const cur={loc:currentLoc(), dir:currentDir()};
+  const favs=loadFavs();
+  if(favs.some(f=>f.loc===cur.loc&&f.dir===cur.dir)) return;
+  const stName=$('#stationSel').selectedOptions[0]?.textContent||cur.loc;
+  const destTxt=$('#dirSel').selectedOptions[0]?.textContent||cur.dir;
+  favs.push({loc:cur.loc, dir:cur.dir, label:`${stName} · ${destTxt.replace('往 ','').replace(/（.*）/,'')}`});
+  saveFavs(favs); renderFavs();
+};
+
+initMeta();
+</script>
+</body>
+</html>
